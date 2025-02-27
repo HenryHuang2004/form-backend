@@ -3,6 +3,6 @@
 data/users/tmp/*
 data/logs/*
 user*.json
-
+*.log
 .db
 __pycache__

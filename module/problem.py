@@ -4,6 +4,7 @@ import requests, json
 from module import user
 from uuid import uuid4
 from filelock import FileLock
+from openai import OpenAI
 dotenv.load_dotenv(verbose=True)
 API_KEY = os.getenv("API_KEY")
 if not API_KEY:
@@ -22,27 +23,25 @@ CREATE TABLE IF NOT EXISTS problems (
     answer TEXT NOT NULL
 );
 ''')
-headers = {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ' + API_KEY
-}
+client = OpenAI(
+    api_key=API_KEY,
+    base_url=url
+)
 
     
 def submit_problem(text):
     try:
-        data = {
-            "model": "DeepSeek-V3",
-            "max_tokens": 2000,
-            "messages": [
+        completion = client.chat.completions.create(
+            model="qwen-max-2025-01-25",  # 此处以 deepseek-r1 为例，可按需更换模型名称。
+            messages=[
                 {"role": "system", "content": "将输入内容分割成题目后，直接返回 json 格式数据，不要出现'```json'。其中“problem”项为题面。“enum”为选项，以数组形式分割每个选项且删除答案标记，这个项目不是必需的。“answer”项为答案，如果题目是选择题，也就是说 enum 存在，那么答案确定且应当已提供，请直接使用给出的答案对应的选项。否则，如果题目没有提供答案，或者题目的答案不完整，且你得到的题目确实是一个问题，你必须自己生成一个对应的答案，保存在 answer 项中，不要超过 100 字。"},
                 {"role": "user", "content": text}
             ],
-            "stream": False,
-            "temperature": 0.6
-        }
-        response = requests.post(url, headers=headers, data=json.dumps(data), verify=False).json()
-        content_str = response.get("choices")[0].get("message").get("content")
-        print(content_str)
+            temperature=0.6,
+            top_p=0.7,
+            max_tokens=2000
+        )
+        content_str = completion.choices[0].message.content
         parsed = json.loads(content_str)
         problem = parsed.get("problem")
         enum_list = parsed.get("enum")
@@ -76,7 +75,7 @@ def get_problem(user_id):
             if (not last_used_problem_ids) or (latest_score != 0):
                 # get 10 random choice problems and 2 random text problems     
                 cursor.execute('''
-                    SELECT uuid FROM problems WHERE type = 'choice' ORDER BY RANDOM() LIMIT 10
+                    SELECT uuid FROM problems WHERE type = 'choice' ORDER BY RANDOM() LIMIT 7
                 ''')
                 choice_problems = cursor.fetchall()
                 cursor.execute('''

@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Query
+import datetime
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Union, Literal
@@ -6,6 +7,9 @@ from module import user, problem, judge
 import os, dotenv
 import requests
 import fastapi_cdn_host
+import logging
+
+
 dotenv.load_dotenv(verbose=True)
 AGENT_ADDRESS = os.getenv("AGENT_ADDRESS")
 if not AGENT_ADDRESS:
@@ -62,6 +66,8 @@ class SubmitResponse(BaseModel):
 class RegisterRequest(BaseModel):
     user_id: str
     name: str
+    student_id: str
+    college: str
     phone: str
     wechat: str
 class ProblemRequest(BaseModel):
@@ -79,16 +85,14 @@ def get_user_status(user_id: str = Query(...)):
     return UserStatusResponse(**user_status)
 
 @app.post("/problem/submit")
-def submit_problem(payload: ProblemRequest):
-    # 提交问题
+def submit_problem(payload: str = Body(..., media_type="text/plain")):
     response = problem.submit_problem(payload)
-    if response is None:
+    if response is False:
         raise HTTPException(status_code=500, detail="Failed to submit problem")
     return response
 
 @app.get("/questions", response_model=QuestionsResponse)
 def get_questions(user_id: str = Query(...)):
-    # 获取问题
     questions = problem.get_problem(user_id)
     if questions is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -101,9 +105,16 @@ def submit_answers(payload: SubmitRequest):
     if status is None:
         raise HTTPException(status_code=404, detail="User not found")
     scores = 0
+    # log to file(./data/logs/{time}-{user_id}.log)
+    time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    file_path = f"./data/logs/{time}-{payload.user_id}.log"
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    logging.basicConfig(filename=file_path, level=logging.INFO)
+    LOGGER = logging.getLogger(__name__)
     for answer in payload.answers:
         [score, reason] = judge.judge(answer.id, answer.answer)
         print(score, reason)
+        LOGGER.info(f"Problem ID: {answer.id}, Score: {score}, Answer: {answer.answer}, Reason: {reason}")
         scores += score
     print(scores)
     user.update_info(payload.user_id, {
@@ -111,7 +122,7 @@ def submit_answers(payload: SubmitRequest):
         "highest_score": max(scores, status["highest_score"]),
         "attempt": status["attempt"] + 1
     })
-    return SubmitResponse(score=scores, result=scores > 0)
+    return SubmitResponse(score=scores, result=scores > 75)
 
 @app.post("/register")
 def register_user(payload: RegisterRequest):
@@ -120,6 +131,8 @@ def register_user(payload: RegisterRequest):
         "name": payload.name,
         "phone": payload.phone,
         "wechat": payload.wechat,
+        "department": payload.college,
+        "iaaa": payload.student_id,
         "registered": True
     })
     if not status:
