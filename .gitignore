@@ -1,0 +1,8 @@
+.env
+
+data/users/tmp/*
+data/logs/*
+user*.json
+
+.db
+__pycache__
