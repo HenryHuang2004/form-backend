@@ -138,7 +138,7 @@ def register_user(payload: RegisterRequest):
     if not status:
         raise HTTPException(status_code=404, detail="User not found")
     agent_url = AGENT_ADDRESS if AGENT_ADDRESS.startswith("http") else f"http://{AGENT_ADDRESS}"
-    response = requests.get(f"{agent_url}/add?id={payload.wechat}")
+    response = requests.get(f"{agent_url}/add?id={payload.wechat}&score={status['highest_score']}")
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail=response.text)
     user.update_info(payload.user_id, {"registered": True})
